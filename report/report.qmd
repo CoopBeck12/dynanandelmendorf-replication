@@ -1,0 +1,447 @@
+---
+title: "Replication of Dynan and Elmendorf (2024)"
+author: "Cooper Beckmann"
+format: 
+  html:
+    mainfont: "Times New Roman"
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+library(tidyverse)
+library(readxl)
+library(patchwork)
+```
+
+## Introduction
+
+This report replicates and expounds on key findings from Karen Dynan and Douglas Elmendorf's 2024 Peterson Institute working paper, *"Fiscal Policy and the Pandemic-Era Surge in US Inflation: Lessons for the Future."*
+
+Dynan and Elmendorf's paper investigates why US inflation jumped to a 40-year high in 2021 and 2022, despite most economists at the time expecting a modest increase. They argue that the force behind this phenomenon was not adverse supply shocks (such as semiconductor shortages or the war in Ukraine) but was most clearly an aggregate demand boom -- driven by unprecedented fiscal stimulus -- that pushed the economy into an inelastic portion of the aggregate supply curve. In other words, the economy was already near full capacity when the American Rescue Plan was enacted in March 2021, so that the extra push to the aggregate demand curve caused more inflation than output increases.
+
+This report replicates several of the paper's key figures using their publicly available replication data, and concludes with an original quantitative extension: a summary of average forecast errors across economic variables.
+
+## Data and Methods
+
+All figures below are built from the authors' publicly available replication data, downloaded from the Peterson Institute for International Economics website. The data is provided as an Excel workbook, with one sheet per figure in the original paper. Each figure was recreated in R using `ggplot2`, following the general workflow of loading the relevant sheet, cleaning and reshaping the data, and rebuilding the chart to match the original as closely as possible.
+
+```{r}
+#| label: load-workbook-path
+#| include: false
+
+data_path <- "../data/raw/DE_fig_data_Excel_charts.xlsx"
+```
+
+## Figure 9a: Core PCE Inflation
+
+The first piece of evidence compares the core Personal Consumption Expenditures (PCE) inflation with the Federal Reserve Bank of Dallas’s trimmed mean PCE inflation measure (the measure of the PCE inflation that “trims” away the most extreme price changes each month and takes a weighted average of the remaining changes). 
+
+```{r}
+#| label: fig9a
+#| echo: false
+#| warning: false
+
+fig9a <- read_excel(
+  data_path,
+  sheet = "fig9_core_infl",
+  skip = 2,
+  col_names = c("date", "core_pce", "trimmed_mean", "recession"),
+  range = "A3:D72"
+) %>%
+  filter(!is.na(date))
+
+recession_periods <- fig9a %>%
+  filter(recession == 1) %>%
+  summarise(start = min(date), end = max(date))
+
+ggplot(fig9a, aes(x = date)) +
+  geom_rect(
+    data = recession_periods,
+    aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf),
+    inherit.aes = FALSE,
+    fill = "gray85"
+  ) +
+  geom_line(aes(y = core_pce, color = "Core PCE"), linewidth = 1) +
+  geom_line(aes(y = trimmed_mean, color = "Trimmed Mean"), linewidth = 1) +
+  scale_color_manual(values = c("Core PCE" = "#1B4F72", "Trimmed Mean" = "#C0392B")) +
+  scale_y_continuous(breaks = seq(0, 6, by = 1)) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  labs(
+    title = "PCE Inflation Measures, 2019-2024",
+    subtitle = "Six-month annualized percent change",
+    caption = "Shaded area corresponds to recession. Data Source: Bureau of Economic Analysis; Dallas Fed (via FRED).",
+    x = NULL,
+    y = "Percent",
+    color = NULL
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "top",
+    plot.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank(),
+    plot.caption = element_text(hjust = 0)
+  )
+```
+Both core PCE inflation and the Dallas Fed’s trimmed mean measure rose sharply starting in spring 2021, well before the worst of the supply shocks (both the Russo-Ukrainian war and semiconductor production shortages) occurred. It is therefore evident that demand-side pressure was building prior to these supply shocks. 
+
+## Figure 9b: Breadth of the Inflation Surge
+
+To confirm this surge was not concentrated in a few supply-constrained categories, the paper examines the San Francisco Federal Reserve Bank’s “t-diffusion” indexes (a measure of the share of consumer spending categories with unusually large price increases relative to their own five-year history). Item-based indexes weight every disaggregated PCE category equally, while expenditure-based indexes weight categories by their actual share of consumer spending. Like in Figure 9a, prices rose sharply beginning in spring 2021. Further, the expenditure and item-based indexes match quite closely, meaning inflation was rising generally across the consumption basket. This rules out that the inflation was isolated to a handful of pandemic-affected categories. 
+
+```{r}
+#| label: fig9b
+#| echo: false
+#| warning: false
+
+fig9b <- read_excel(
+  data_path,
+  sheet = "fig9_core_infl",
+  skip = 2,
+  col_names = c("date", "t_diffusion_items", "t_diffusion_expenditures"),
+  range = "E3:G71"
+) %>%
+  filter(!is.na(date))
+
+ggplot(fig9b, aes(x = date)) +
+  geom_rect(
+    aes(xmin = as.Date("2020-03-01"), xmax = as.Date("2020-04-01"), ymin = -Inf, ymax = Inf),
+    fill = "gray85"
+  ) +
+  geom_line(aes(y = t_diffusion_items, color = "t-diffusion: items"), linewidth = 0.8) +
+  geom_line(aes(y = t_diffusion_expenditures, color = "t-diffusion: expenditures"), linewidth = 0.8) +
+  scale_color_manual(values = c("t-diffusion: items" = "#1B4F72", "t-diffusion: expenditures" = "#C0392B")) +
+  scale_y_continuous(breaks = seq(0, 60, by = 15)) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  labs(
+    title = "Measures of PCE Inflation Dispersion",
+    subtitle = "Percent of items/expenditures with 12-month price increases 2+ standard deviations above their 5-year average",
+    caption = "Shaded area corresponds to recession. Data Source: Federal Reserve Bank of San Francisco.",
+    x = NULL,
+    y = NULL,
+    color = NULL
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "top",
+    plot.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank(),
+    plot.caption = element_text(hjust = 0)
+  )
+```
+
+Both measures jump sharply starting in spring 2021, indicating the price acceleration was widespread across the consumption basket rather than isolated to a few pandemic-affected categories.
+
+## Figure 8: Forecasts vs. Actual Realizations
+
+Figure 8 is the paper's central piece of evidence. It compares CBO projections made in February 2021 (before the American Rescue Plan) and July 2021 (after it) against actual realized outcomes for GDP growth, unemployment, core PCE inflation, and the federal funds rate.
+
+```{r}
+#| label: fig8
+#| echo: false
+#| warning: false
+#| fig-width: 10
+#| fig-height: 8
+
+fig8 <- read_excel(
+  data_path,
+  sheet = "fig8_cbo_postARP_actual ",
+  col_names = c(
+    "date",
+    "gdp_feb2021", "gdp_jul2021", "gdp_current",
+    "ur_feb2021", "ur_jul2021", "ur_current",
+    "infl_feb2021", "infl_jul2021", "infl_current",
+    "fedfunds_feb2021", "fedfunds_jul2021", "fedfunds_current"
+  ),
+  range = "A4:M5"
+)
+
+make_fig8_long <- function(vars, labels) {
+  fig8 %>%
+    select(date, all_of(vars)) %>%
+    pivot_longer(cols = all_of(vars), names_to = "vintage", values_to = "value") %>%
+    mutate(
+      year = year(date),
+      vintage = recode(vintage, !!!setNames(labels, vars)),
+      vintage = factor(vintage, levels = labels)
+    )
+}
+
+labels <- c("February 2021", "July 2021", "Current")
+
+fig8_gdp_long <- make_fig8_long(c("gdp_feb2021", "gdp_jul2021", "gdp_current"), labels)
+fig8_ur_long <- make_fig8_long(c("ur_feb2021", "ur_jul2021", "ur_current"), labels)
+fig8_infl_long <- make_fig8_long(c("infl_feb2021", "infl_jul2021", "infl_current"), labels)
+fig8_fedfunds_long <- make_fig8_long(c("fedfunds_feb2021", "fedfunds_jul2021", "fedfunds_current"), labels)
+
+make_fig8_chart <- function(data, chart_title) {
+  ggplot(data, aes(x = factor(year), y = value, fill = vintage)) +
+    geom_col(position = position_dodge(width = 0.75), width = 0.75, color = "gray30", linewidth = 0.3) +
+    geom_text(
+      aes(label = round(value, 1)),
+      position = position_dodge(width = 0.75),
+      vjust = -0.5, size = 3.5, color = "gray20"
+    ) +
+    scale_fill_manual(values = c(
+      "February 2021" = "#AED6F1",
+      "July 2021" = "#1B4F72",
+      "Current" = "#F5B041"
+    )) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
+    labs(title = chart_title, subtitle = "Percent", x = NULL, y = NULL, fill = NULL) +
+    theme_minimal(base_size = 14) +
+    theme(
+      legend.position = "top",
+      plot.title = element_text(face = "bold", size = 15),
+      plot.subtitle = element_text(color = "gray40"),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.text = element_text(color = "gray30")
+    )
+}
+
+p_gdp <- make_fig8_chart(fig8_gdp_long, "Q4/Q4 Real GDP Growth")
+p_ur <- make_fig8_chart(fig8_ur_long, "Q4 Unemployment Rate")
+p_infl <- make_fig8_chart(fig8_infl_long, "Q4/Q4 Core PCE Inflation")
+p_fedfunds <- make_fig8_chart(fig8_fedfunds_long, "Q4 Federal Funds Rate")
+
+(p_gdp | p_ur) / (p_infl | p_fedfunds) +
+  plot_annotation(
+    title = "CBO Projections and Actual Realizations",
+    theme = theme(plot.title = element_text(face = "bold", size = 17))
+  )
+```
+
+The pattern is quite clear when GDP and unemployment forecasts were reasonably close to actual outcomes, but inflation and the federal funds rate were missed by a wide margin.
+
+The scale of the forecast miss raises an implicit question: why did policymakers enact stimulus so far beyond what the CBO's own pre-ARP estimates suggested was needed? In February 2021, the CBO projected a cumulative output gap of only about 2.2 percent of potential GDP over the following two years — a modest shortfall. The American Rescue Plan, at roughly 8 percent of GDP, was nearly four times that size.
+
+Dynan and Elmendorf identify three reasons policymakers proceeded regardless. First, deep uncertainty about the pandemic's trajectory and the behavior of fiscal multipliers in an unprecedented environment made policymakers skeptical of the CBO's point estimates. Second, an asymmetric fear of repeating the 2009 stimulus, which many viewed in hindsight as too little and responsible for years of unnecessarily elevated unemployment, pushed policymakers toward erring on the side of liberal spending. Third, a decade of a historically flat Phillips curve — in which even very low unemployment had failed to generate meaningful inflation — made the perceived cost of overstimulating appear low.
+
+In retrospect, this calibration reflected a miscalculation of the economy's position. Policymakers underestimated how close the economy already was to full capacity, and therefore how steep the aggregate supply curve would become once the ARP's demand boost arrived.
+
+## Figure 10: Labor Market Tightness
+
+If the inflation surge reflected an economy pushed to its capacity limits, wage growth should also have accelerated well above its pre-pandemic pace. Figure 10 shows two measures of compensation growth: average hourly earnings and the Employment Cost Index.
+
+```{r}
+#| label: fig10
+#| echo: false
+#| warning: false
+#| fig-width: 10
+#| fig-height: 5.5
+
+fig10 <- read_excel(
+  data_path,
+  sheet = "fig10_ahe_eci_6mo"
+) %>%
+  select(date = mdate, ahe = az6_ahe, ahe_avg = aheavg, eci = az6_eci, eci_avg = eciavg) %>%
+  filter(!is.na(date))
+
+fig10_eci_clean <- fig10 %>% filter(!is.na(eci))
+
+p_ahe <- ggplot(fig10, aes(x = date)) +
+  geom_line(aes(y = ahe), color = "#1B4F72", linewidth = 1) +
+  annotate("segment", x = -Inf, xend = Inf, y = unique(fig10$ahe_avg), yend = unique(fig10$ahe_avg),
+           color = "gray50", linewidth = 0.7, linetype = "dashed") +
+  annotate("text", x = median(fig10$date), y = unique(fig10$ahe_avg) - 0.3,
+           label = "2018-2019 average", hjust = 0.5, vjust = 1, size = 3.2, color = "gray50") +
+  geom_vline(xintercept = as.numeric(as.Date("2021-03-01")), linetype = "dotted", color = "gray40") +
+  annotate("text", x = as.Date("2021-03-01"), y = 1.75,
+           label = "March 2021", hjust = -0.1, size = 3.2, color = "gray40") +
+  scale_x_date(date_breaks = "6 months", date_labels = "%m/%d/%y",
+               limits = c(as.Date(min(fig10$date)), as.Date("2024-09-30")),
+               expand = expansion(mult = c(0.02, 0.05))) +
+  scale_y_continuous(limits = c(0, 7), breaks = seq(0, 7, by = 1)) +
+  labs(title = "Average Hourly Earnings",
+       subtitle = "Percent change from six months earlier, annualized",
+     caption = "Employment cost index, wages and salaries, private industry.
+Data source: Bureau of Labor Statistics",
+       x = NULL, y = NULL) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.caption = element_text(hjust = 0, size = 9)
+
+  )
+
+p_eci <- ggplot(fig10_eci_clean, aes(x = date)) +
+  geom_line(aes(y = eci), color = "#C0392B", linewidth = 1) +
+  annotate("segment", x = -Inf, xend = Inf, y = unique(fig10_eci_clean$eci_avg), yend = unique(fig10_eci_clean$eci_avg),
+           color = "gray50", linewidth = 0.7, linetype = "dashed") +
+  annotate("text", x = median(fig10_eci_clean$date), y = unique(fig10_eci_clean$eci_avg) - 0.3,
+           label = "2018-2019 average", hjust = 0.5, vjust = 1, size = 3.2, color = "gray50") +
+  scale_x_date(date_breaks = "6 months", date_labels = "%m/%d/%y",
+               limits = c(as.Date(min(fig10_eci_clean$date)), as.Date("2024-09-30")),
+               expand = expansion(mult = c(0.02, 0.05))) +
+  scale_y_continuous(limits = c(0, 7), breaks = seq(0, 7, by = 1)) +
+  labs(title = "Employment Cost Index",
+       subtitle = "Percent change from six months earlier, annualized",
+ caption = "Average hourly earnings of all private employees.
+Data source: Bureau of Labor Statistics",
+       x = NULL, y = NULL) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.caption = element_text(hjust = 0, size = 9)
+  )
+
+(p_ahe | p_eci) +
+  plot_annotation(
+    title = "Compensation Growth Realizations",
+    theme = theme(
+      plot.title = element_text(face = "bold", size = 17),
+      plot.caption = element_text(hjust = 0)
+    )
+  )
+```
+Both measures accelerated well above their 2018–2019 averages starting in 2021. This acceleration became visible before the worst supply shocks of the period, including the invasion of Ukraine, again indicating that demand pressure was building independently of external shocks. The persistence of elevated wage growth through 2022 suggests the labor market remained a binding constraint on the economy's capacity well after the initial burst of consumer price inflation.
+
+Strong wage growth in this period also directly complicates the "adverse supply shock" account. A negative supply shock, taken alone, would be expected to reduce labor demand and therefore dampen wage growth even as prices rose. What Figure 10 shows instead is compensation growth accelerating alongside price growth.
+
+## Figure 11: Labor Force Participation
+
+A tight labor market implies that labor supply did not expand enough to meet the surge in demand. Figure 11 compares CBO's labor force participation rate projections at three points in time — January 2020, February 2021, and July 2021 — against the actual outcome.
+
+```{r}
+#| label: fig11
+#| echo: false
+#| warning: false
+#| fig-width: 9
+#| fig-height: 5.5
+
+fig11 <- read_excel(
+  data_path,
+  sheet = "fig11_cbo_lfpr",
+  col_names = c("date", "jan2020", "feb2021", "jul2021", "actual"),
+  range = "A3:E100"
+) %>%
+  filter(!is.na(date))
+
+ggplot(fig11, aes(x = date)) +
+  geom_line(aes(y = jan2020, color = "1/2020"), linewidth = 0.9, linetype = "dashed") +
+  geom_line(aes(y = feb2021, color = "2/2021"), linewidth = 0.9, linetype = "dashed") +
+  geom_line(aes(y = jul2021, color = "7/2021"), linewidth = 0.9, linetype = "dashed") +
+  geom_line(aes(y = actual, color = "Actual"), linewidth = 1.1, linetype = "solid") +
+  scale_color_manual(values = c(
+    "1/2020" = "#006994",
+    "2/2021" = "#C0392B",
+    "7/2021" = "#FFAE42",
+    "Actual" = "gray70"
+  )) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%m/%d/%y") +
+  scale_y_continuous(limits = c(60, 64), breaks = seq(60, 64, by = 1)) +
+  labs(
+    title = "CBO Labor Force Participation Rate Projections",
+    subtitle = "Percent",
+    caption = "Data Source: Congressional Budget Office and Bureau of Labor Statistics (via FRED).
+Dashed segments start with quarter of projection publication. Solid lines correspond to available history at time of projection.",
+    x = NULL, y = NULL, color = NULL
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "top",
+    plot.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank(),
+    plot.caption = element_text(hjust = 0)
+  )
+```
+Actual participation ran below even the more pessimistic pre-ARP projections through most of 2021 and 2022, only recovering by 2023–24 as older workers returned and immigration picked up. Notably, this shortfall persisted even as wages rose sharply — a sign that higher pay alone could not quickly draw workers back into the labor force.
+
+## Original Analysis: Quantifying Forecast Error
+
+The figures above show, qualitatively, that forecasters were closer to correct on real economic activity than on inflation. This section quantifies that pattern directly and extends the paper's evidence with an original calculation not present in the source paper.
+
+```{r}
+#| label: original-analysis
+#| echo: false
+#| warning: false
+#| fig-width: 8
+#| fig-height: 5
+
+forecast_errors <- fig8 %>%
+  mutate(year = year(date)) %>%
+  transmute(
+    year,
+    gdp_error_feb = gdp_current - gdp_feb2021,
+    gdp_error_jul = gdp_current - gdp_jul2021,
+    ur_error_feb = ur_current - ur_feb2021,
+    ur_error_jul = ur_current - ur_jul2021,
+    infl_error_feb = infl_current - infl_feb2021,
+    infl_error_jul = infl_current - infl_jul2021,
+    fedfunds_error_feb = fedfunds_current - fedfunds_feb2021,
+    fedfunds_error_jul = fedfunds_current - fedfunds_jul2021
+  )
+
+error_summary <- forecast_errors %>%
+  summarise(
+    GDP = mean(abs(c(gdp_error_feb, gdp_error_jul))),
+    Unemployment = mean(abs(c(ur_error_feb, ur_error_jul))),
+    Inflation = mean(abs(c(infl_error_feb, infl_error_jul))),
+    `Fed Funds Rate` = mean(abs(c(fedfunds_error_feb, fedfunds_error_jul)))
+  ) %>%
+  pivot_longer(everything(), names_to = "Variable", values_to = "Mean Absolute Forecast Error") %>%
+  arrange(desc(`Mean Absolute Forecast Error`))
+
+knitr::kable(error_summary, digits = 2, caption = "Mean Absolute Forecast Error by Variable, 2021-2022")
+
+ggplot(error_summary, aes(x = reorder(Variable, `Mean Absolute Forecast Error`),
+                            y = `Mean Absolute Forecast Error`)) +
+  geom_col(fill = "#1B4F72", color = "gray30", linewidth = 0.3, width = 0.6) +
+  geom_text(aes(label = round(`Mean Absolute Forecast Error`, 2)),
+            hjust = -0.2, nudge_x = 0.25, size = 3.8, color = "gray20") +
+  coord_flip() +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
+  labs(
+    title = "Average Forecast Error by Variable, 2021-2022",
+    subtitle = "Mean absolute difference between projected and actual values (Feb & Jul 2021 vintages)",
+    caption = "Author's calculation, based on Dynan and Elmendorf (2024) data.",
+    x = NULL,
+    y = "Mean Absolute Error (percentage points)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_blank(),
+    plot.caption = element_text(hjust = 0)
+  )
+```
+
+
+Inflation forecasts missed by an average of 3.10 percentage points -- more than four times the average error on unemployment (0.71 points) and roughly double the error on GDP (1.65 points) and the fed funds rate (1.78 points). This extends the argument made with figure 8 that forecasters were reasonably accurate about the real economy but badly wrong specifically about inflation.
+
+## Further Analysis
+
+**Engaging the Alternative Account: Bernanke and Blanchard**
+
+Not all economists attribute the inflation surge primarily to demand pressure. Bernanke and Blanchard (2023) argue that if an overheated labor market were the main driver, wage growth should have outpaced what price growth alone would predict. Yet they find that prices rose faster than labor costs justified, while labor costs did not rise faster than prices justified. On their reading, this weakens the case for a labor-market-driven story.
+
+Dynan and Elmendorf push back on this interpretation. They explain that an overheated economy can pressure prices directly, as well as through wages. They also point to research finding little change in the markup of prices over wages during the inflation surge, which is difficult to reconcile with Bernanke and Blanchard's account if firms were simply passing through excess wage costs. 
+
+**A Symmetric Explanation for Disinflation**
+
+The same framework that explains the 2021–22 inflation surge also explains its reversal. Core inflation fell from close to 5 percent at the start of 2023 to roughly 3 percent by late 2024, a decline the paper attributes to a mirror image of the forces that drove the original surge: favorable supply developments (rising labor force participation, easing semiconductor shortages, an immigration-driven expansion of labor supply) combined with demand restraint, as fiscal stimulus faded and the Federal Reserve's rate increases took hold. If the aggregate supply curve is steep only near full capacity, disinflation does not require a severe economic contraction. This symmetry is itself indirect evidence for the paper's central claim that an account built on inelastic supply should predict not only how inflation rose but how it fell. The 2023–24 data are broadly consistent with that prediction.
+
+**A Brief International Comparison**
+
+The paper briefly considers the international objection. Inflation also surged in Europe, where fiscal stimulus was considerably smaller than in the United States. Dynan and Elmendorf note that Europe was significantly more exposed than the United States to energy and food price shocks stemming from the Russian invasion of Ukraine, and that European inflation rose later than US inflation, which made cross-country comparisons difficult to interpret as objective evidence against the paper's argumen
+
+## Conclusion
+
+This replication confirms Dynan and Elmendorf's central finding. The pandemic-era inflation surge is best explained by a demand boom running into an inelastic aggregate supply curve, as opposed to adverse supply shocks. The evidence for this spans multiple dimensions -- the timing and breadth of the inflation acceleration, the scale of the forecast miss specifically on inflation and interest rates (versus real activity), and the tightness of the labor market as reflected in wage growth and labor force participation.
+
+It is worth noting a limitation shared by both the original paper and this replication. The analysis isolates fiscal policy's effect on demand and does not attempt to separately quantify the contribution of monetary policy. The Federal Reserve's near-zero interest rates and large-scale asset purchases operated simultaneously with fiscal stimulus throughout 2021, and both would be expected to boost aggregate demand. Because Dynan and Elmendorf's framework holds monetary policy's effect on demand fixed, neither the original paper nor this replication can cleanly separate how much of the demand boom, and the resulting forecast errors, is attributable to fiscal policy specifically versus the broader accommodative monetary environment in which it operated.
+
+## References
+
+Bernanke, Ben, and Olivier Blanchard. 2023. "What Caused the US Pandemic-Era Inflation?" PIIE Working Paper 23-4.
+
+Dynan, Karen, and Douglas Elmendorf. 2024. "Fiscal Policy and the Pandemic-Era Surge in US Inflation: Lessons for the Future." PIIE Working Paper 24-22.
